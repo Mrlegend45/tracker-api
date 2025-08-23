@@ -1,0 +1,11 @@
+{
+  "name": "tracker-api",
+  "version": "1.0.0",
+  "description": "Live tracker scraping API",
+  "main": "api/track.js",
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "node-fetch": "^2.6.7"
+  }
+}
