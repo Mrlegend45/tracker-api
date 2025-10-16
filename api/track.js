@@ -64,7 +64,7 @@ module.exports = async function (req, res) {
                 (req.body && req.body.phone) ? req.body.phone.toString().trim() : '';
 
   if (!phone) {
-    return res.status(400).json({ error: 'phone parameter required. Example: /api/search?phone=03027665767' });
+    return res.status(400).json({ error: 'phone parameter required. Example: /api/track?phone=03027665767' });
   }
 
   try {
@@ -74,7 +74,6 @@ module.exports = async function (req, res) {
     }
 
     const cnic = phoneRecords[0].CNIC;
-
     const cnicRecords = cnic ? await fetchRecords(cnic) : [];
 
     const allRecords = [...phoneRecords, ...cnicRecords];
@@ -82,7 +81,7 @@ module.exports = async function (req, res) {
     const seen = new Set();
 
     for (const rec of allRecords) {
-      const key = ${rec.Mobile}-${rec.CNIC};
+      const key = `${rec.Mobile}-${rec.CNIC}`;
       if (!seen.has(key)) {
         seen.add(key);
         unique.push(rec);
