@@ -1,11 +1,11 @@
 {
-  "name": "tracker-api",
+  "name": "freshsim-api",
   "version": "1.0.0",
-  "description": "Live tracker scraping API",
   "main": "api/track.js",
-  "license": "MIT",
+  "type": "commonjs",
   "dependencies": {
+    "axios": "^1.7.0",
     "cheerio": "^1.0.0",
-    "node-fetch": "^2.6.7"
+    "querystring": "^0.2.1"
   }
 }
