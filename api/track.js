@@ -1,37 +1,107 @@
-const fetch = require("node-fetch");
-const cheerio = require("cheerio");
+const axios = require('axios');
+const cheerio = require('cheerio');
+const qs = require('querystring');
 
-module.exports = async (req, res) => {
-  const number = req.query.number;
-  if (!number) {
-    return res.status(400).json({ error: "Please provide a number Or CNIC" });
+const POST_URL = 'https://freshsimdata.net/numberDetails.php';
+const COOKIE_HEADER = process.env.FRESHSIM_COOKIES || '';
+
+const DEFAULT_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139 Mobile Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Content-Type': 'application/x-www-form-urlencoded',
+  'Referer': 'https://freshsimdata.net/'
+};
+
+function parseTableHtml(html) {
+  const $ = cheerio.load(html);
+  let targetTable = null;
+
+  $('table').each((i, el) => {
+    const headerText = $(el).find('thead').text() || $(el).find('tr').first().text();
+    if (/Mobile|Name|CNIC/i.test(headerText)) {
+      targetTable = el;
+      return false;
+    }
+  });
+
+  if (!targetTable) return [];
+
+  const rows = $(targetTable).find('tbody tr');
+  const result = [];
+
+  rows.each((i, r) => {
+    const cols = $(r).find('td, th');
+    if (cols.length === 0) return;
+
+    const colText = [];
+    cols.each((j, c) => colText.push($(c).text().trim()));
+
+    result.push({
+      Mobile: colText[0] || null,
+      Name: colText[1] || null,
+      CNIC: colText[2] || null,
+      Address: colText[3] || null,
+      Country: 'Pakistan'
+    });
+  });
+
+  return result;
+}
+
+async function fetchRecords(value) {
+  const payload = qs.stringify({
+    numberCnic: value,
+    searchNumber: 'search'
+  });
+
+  const headers = Object.assign({}, DEFAULT_HEADERS, COOKIE_HEADER ? { Cookie: COOKIE_HEADER } : {});
+  const response = await axios.post(POST_URL, payload, { headers, timeout: 20000, responseType: 'text' });
+  return parseTableHtml(response.data);
+}
+
+module.exports = async function (req, res) {
+  const phone = (req.query && req.query.phone) ? req.query.phone.toString().trim() :
+                (req.body && req.body.phone) ? req.body.phone.toString().trim() : '';
+
+  if (!phone) {
+    return res.status(400).json({ error: 'phone parameter required. Example: /api/search?phone=03027665767' });
   }
 
   try {
-    const response = await fetch("https://live-tracker.site/", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ searchinfo: number }).toString()
+    const phoneRecords = await fetchRecords(phone);
+    if (phoneRecords.length === 0) {
+      return res.json({ success: true, phone, records: [] });
+    }
+
+    const cnic = phoneRecords[0].CNIC;
+
+    const cnicRecords = cnic ? await fetchRecords(cnic) : [];
+
+    const allRecords = [...phoneRecords, ...cnicRecords];
+    const unique = [];
+    const seen = new Set();
+
+    for (const rec of allRecords) {
+      const key = ${rec.Mobile}-${rec.CNIC};
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(rec);
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.json({
+      success: true,
+      phone,
+      records: unique
     });
 
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    const results = [];
-
-    $(".resultcontainer").each((_, container) => {
-      const record = {};
-      $(container).find(".row").each((_, row) => {
-        const head = $(row).find(".detailshead").text().trim().replace(":", "");
-        const detail = $(row).find(".details").text().trim();
-        record[head] = detail;
-      });
-      results.push(record);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: 'Request failed',
+      details: err.message,
+      statusCode: err.response ? err.response.status : null
     });
-
-    return res.status(200).json(results);
-
-  } catch (error) {
-    return res.status(500).json({ error: "Failed to fetch data", details: error.message });
   }
 };
